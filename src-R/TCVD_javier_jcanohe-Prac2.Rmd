@@ -1,0 +1,769 @@
+---
+title: 'Tipología y Ciclo de Vida de Datos: PRACTICA2 - Limpieza y Análisis'
+author: "Autores: Javier López Calderón & José María Cano Hernández"
+date: "Enero 2021"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: TCVDatos-PRAC2-header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+******
+
+Esta práctica pretende analizar la Calidad del vino tinto a partir de una serie de atributos.
+Toda la información relativa al DataSet que se ha utilizado, se ha extraido de la siguiente URL:
+https://www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009
+
+******
+# Descripción del dataset. ¿Por qué es importante y qué pregunta/problema pretende responder?
+
+Este Dataset contiene información de los atributos del vino tinto que determinan su nivel de calidad. 
+La variable objetivo (calidad del vino) forma parte del DataSet. 
+
+Descripción de las variables contenidas en el fichero:
+
+* fixed acidity: Acidez fija. Cantidad de ácidos fijos o no volátiles. 
+* volatile acidity: Acidez volátil. Cantidad de ácido acético en el vino.
+* citric acid: ácido cítrico. Encontrado en pequeñas cantidad aporta frescura y sabor a los vinos.
+* residual sugar: azúcar residual. Cantidad de azúcar presente tras el proceso de fermentación.
+* chlorides: Clorides. Cantidad de sal en el vino.
+* free sulfur dioxide: dióxido de sulfuro libre. Cantidad.
+* total sulfur dioxide: total de dioxido de sulfuro. Cantidad. 
+* density: densidad. Densidad de agua dependiente del porcentaje de alcohol y contenido en azúcar.
+* pH: describe el nivel de acidez o basal que es un vino en la escala de 0 (muy ácido) a 14 (muy básico).
+* sulfatos: sulfatos, aditivo del vino que puede contribuir a los niveles de dioxido de sulfuro.
+* alcohol: porcentaje de alcohol en el vino.
+
+Variable de Salida:
+* quality: Calidad. Variable objetivo. Rango de valores de 0 a 10.
+
+
+La pregunta que pretende responder es determinar la calidad del vino a partir de los atributos que se disponen.
+Se trata por tanto de un problema supervisado de clasificación en el que se construirán modelos cuyo objetivo sea predecir la calidad del vino tino.
+
+
+# Integración y selección de los datos de interés a analizar
+
+Cargamos la información del Data Set descargado previamente a fichero winequality-red.csv de la URL mencionada previamente.
+
+```{r message= FALSE, warning=FALSE}
+
+# Cargamos los paquetes R que vamos a usar
+library(cluster)
+library(ggplot2)
+library(dplyr)
+
+# Cargamos el juego de datos
+dataFile <- read.csv('winequality-red.csv',stringsAsFactors = FALSE, header = TRUE)
+filas=dim(dataFile)[1]
+
+# Tipo de variables en fichero cargado.
+str(dataFile)
+
+# Estadísticas de valores vacíos
+colSums(is.na(dataFile))
+colSums(dataFile=="")
+
+# Omitimos cualquier row con NA en cualquiera de sus columnas. 
+dataWine=na.omit(dataFile)
+colSums(is.na(dataWine))
+
+# Distribución de los diferentes atributos
+summary(dataWine)
+
+```
+
+A priori, No se detectan nulos ni valores NA.
+Sin embargo, sí que será necesario analizar en mayor detalle la distribución de los valores de los atributos para identificar outliers o valores extremos. 
+
+
+Examinamos la variable objetivo, analizando la distribución de sus valores.
+
+```{r message= FALSE, warning=FALSE}
+print("Distribución de Quality")
+#Atributo Quality
+print("Distribución de Quality")
+summary(dataWine$quality)
+table(sort(dataWine$quality))
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=))+geom_bar()
+```
+
+La gran mayoría de valores corresponden a calidades de 5 y 6.
+
+Discretizamos los valores de la variable objetivo para simplificar, incorporando un nuevo atributo al DataSet denominado "revisionCalidad":
+
+* Entre 0 y 4, se asigna Calidad Baja.
+* Entre 5 y 6, se asigna Calidad Normal.
+* Entre 7 y 10, se asigna Calidad Excelente.
+
+
+```{r message= FALSE, warning=FALSE}
+dataWine["revisionCalidad"] <- cut(dataWine$quality, breaks = c(0,4,6,10), labels = c("0-Baja", "1-Normal","2-Excelente"))
+
+# Vemos como se agrupan los datos.
+plot(dataWine$revisionCalidad)
+```
+
+Distribución de los atributos en base a la variable objetivo Quality
+
+```{r message= FALSE, warning=FALSE}
+
+
+#Distribucion de los Valores en Estudio para conocer donde se concentran sus valores e identificar presencia y relevancia de outliers.
+#Atributo fixed.acidity
+print("Distribución de fixed.acidity")
+summary(dataWine$fixed.acidity)
+table(sort(dataWine$fixed.acidity))
+ggplot(data = dataWine[1:filas,],aes(x=fixed.acidity,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=fixed.acidity))+geom_bar()+ylab("fixed.acidity")
+
+
+#Atributo volatile.acidity
+print("Distribución de volatile.acidity")
+summary(dataWine$volatile.acidity)
+table(sort(dataWine$volatile.acidity))
+ggplot(data = dataWine[1:filas,],aes(x=volatile.acidity,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=volatile.acidity))+geom_bar()+ylab("volatile.acidity")
+
+#Atributo citric.acid
+print("Distribución de citric.acid")
+summary(dataWine$citric.acid)
+table(sort(dataWine$citric.acid))
+ggplot(data = dataWine[1:filas,],aes(x=citric.acid,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=citric.acid))+geom_bar()+ylab("citric.acid")
+
+#Atributo residual.sugar
+print("Distribución de residual.sugar")
+summary(dataWine$residual.sugar)
+table(sort(dataWine$residual.sugar))
+ggplot(data = dataWine[1:filas,],aes(x=residual.sugar,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=residual.sugar))+geom_bar()+ylab("residual.sugar")
+
+#Atributo chlorides
+print("Distribución de chlorides")
+summary(dataWine$chlorides)
+table(sort(dataWine$chlorides))
+ggplot(data = dataWine[1:filas,],aes(x=chlorides,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=chlorides))+geom_bar()+ylab("chlorides")
+
+#Atributo free.sulfur.dioxide
+print("Distribución de free.sulfur.dioxide")
+summary(dataWine$free.sulfur.dioxide)
+table(sort(dataWine$free.sulfur.dioxide))
+ggplot(data = dataWine[1:filas,],aes(x=free.sulfur.dioxide,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=free.sulfur.dioxide))+geom_bar()+ylab("free.sulfur.dioxide")
+
+#Atributo total.sulfur.dioxide
+print("Distribución de total.sulfur.dioxide")
+summary(dataWine$total.sulfur.dioxide)
+table(sort(dataWine$total.sulfur.dioxide))
+ggplot(data = dataWine[1:filas,],aes(x=total.sulfur.dioxide,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=total.sulfur.dioxide))+geom_bar()+ylab("total.sulfur.dioxide")
+
+#Atributo density
+print("Distribución de density")
+summary(dataWine$density)
+table(sort(dataWine$density))
+ggplot(data = dataWine[1:filas,],aes(x=density,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=density))+geom_bar()+ylab("density")
+
+#Atributo pH
+print("Distribución de pH")
+summary(dataWine$pH)
+table(sort(dataWine$pH))
+ggplot(data = dataWine[1:filas,],aes(x=pH,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=pH))+geom_bar()+ylab("pH")
+
+#Atributo sulphates
+print("Distribución de Sulphates")
+summary(dataWine$sulphates)
+table(sort(dataWine$sulphates))
+ggplot(data = dataWine[1:filas,],aes(x=sulphates,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=sulphates))+geom_bar()+ylab("sulphates")
+
+#Atributo alcohol
+print("Distribución de alcohol")
+summary(dataWine$alcohol)
+table(sort(dataWine$alcohol))
+ggplot(data = dataWine[1:filas,],aes(x=alcohol,fill=quality))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=quality,fill=alcohol))+geom_bar()+ylab("alcohol")
+
+```
+
+
+
+Distribución de los atributos en base a la nueva variable objetivo revisionCalidad.
+
+```{r message= FALSE, warning=FALSE}
+
+#Distribucion de los Valores en Estudio para conocer donde se concentran sus valores e identificar presencia y relevancia de outliers.
+#Atributo fixed.acidity
+print("Distribución de fixed.acidity")
+summary(dataWine$fixed.acidity)
+table(sort(dataWine$fixed.acidity))
+ggplot(data = dataWine[1:filas,],aes(x=fixed.acidity,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=fixed.acidity))+geom_bar()+ylab("fixed.acidity")
+
+boxplot(dataWine$fixed.acidity ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$fixed.acidity,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+#Atributo volatile.acidity
+print("Distribución de volatile.acidity")
+summary(dataWine$volatile.acidity)
+table(sort(dataWine$volatile.acidity))
+ggplot(data = dataWine[1:filas,],aes(x=volatile.acidity,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=volatile.acidity))+geom_bar()+ylab("volatile.acidity")
+
+boxplot(dataWine$volatile.acidity ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$volatile.acidity,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+#Atributo citric.acid
+print("Distribución de citric.acid")
+summary(dataWine$citric.acid)
+table(sort(dataWine$citric.acid))
+ggplot(data = dataWine[1:filas,],aes(x=citric.acid,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=citric.acid))+geom_bar()+ylab("citric.acid")
+
+boxplot(dataWine$citric.acid ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$citric.acid,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+
+#Atributo residual.sugar
+print("Distribución de residual.sugar")
+summary(dataWine$residual.sugar)
+table(sort(dataWine$residual.sugar))
+ggplot(data = dataWine[1:filas,],aes(x=residual.sugar,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=residual.sugar))+geom_bar()+ylab("residual.sugar")
+
+boxplot(dataWine$residual.sugar ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$residual.sugar,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+
+#Atributo chlorides
+print("Distribución de chlorides")
+summary(dataWine$chlorides)
+table(sort(dataWine$chlorides))
+ggplot(data = dataWine[1:filas,],aes(x=chlorides,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=chlorides))+geom_bar()+ylab("chlorides")
+
+boxplot(dataWine$chlorides ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$chlorides,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+#Atributo free.sulfur.dioxide
+print("Distribución de free.sulfur.dioxide")
+summary(dataWine$free.sulfur.dioxide)
+table(sort(dataWine$free.sulfur.dioxide))
+ggplot(data = dataWine[1:filas,],aes(x=free.sulfur.dioxide,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=free.sulfur.dioxide))+geom_bar()+ylab("free.sulfur.dioxide")
+
+boxplot(dataWine$free.sulfur.dioxide ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$free.sulfur.dioxide,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+#Atributo total.sulfur.dioxide
+print("Distribución de total.sulfur.dioxide")
+summary(dataWine$total.sulfur.dioxide)
+table(sort(dataWine$total.sulfur.dioxide))
+ggplot(data = dataWine[1:filas,],aes(x=total.sulfur.dioxide,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=total.sulfur.dioxide))+geom_bar()+ylab("total.sulfur.dioxide")
+
+boxplot(dataWine$total.sulfur.dioxide ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$total.sulfur.dioxide,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+#Atributo density
+print("Distribución de density")
+summary(dataWine$density)
+table(sort(dataWine$density))
+ggplot(data = dataWine[1:filas,],aes(x=density,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=density))+geom_bar()+ylab("density")
+
+boxplot(dataWine$density ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$density,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+#Atributo pH
+print("Distribución de pH")
+summary(dataWine$pH)
+table(sort(dataWine$pH))
+ggplot(data = dataWine[1:filas,],aes(x=pH,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=pH))+geom_bar()+ylab("pH")
+
+boxplot(dataWine$pH ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$pH,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+#Atributo sulphates
+print("Distribución de Sulphates")
+summary(dataWine$sulphates)
+table(sort(dataWine$sulphates))
+ggplot(data = dataWine[1:filas,],aes(x=sulphates,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=sulphates))+geom_bar()+ylab("sulphates")
+
+boxplot(dataWine$sulphates ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$sulphates,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+#Atributo alcohol
+print("Distribución de alcohol")
+summary(dataWine$alcohol)
+table(sort(dataWine$alcohol))
+ggplot(data = dataWine[1:filas,],aes(x=alcohol,fill=revisionCalidad))+geom_bar()
+ggplot(data = dataWine[1:filas,],aes(x=revisionCalidad,fill=alcohol))+geom_bar()+ylab("alcohol")
+
+boxplot(dataWine$alcohol ~ dataWine$revisionCalidad,                            
+        col = "orange",
+        border = "orange",
+        pch = 16)
+ 
+points(dataWine$revisionCalidad, dataWine$alcohol,                       
+       col = "#1b98e0",
+       pch = 16,
+       cex = 0.4)
+
+```
+
+
+> Calculo de Outliers
+
+Se considera outlier todo valor de un atributo que esté a más de 3 desviaciones estándar de la media.
+
+```{r message= FALSE, warning=FALSE}
+
+# Función que calcula Outliers a partir de un data frame.
+zscore_outlier <- function(df) {
+  output <- NULL
+  media <- mean(df)
+  desvStd <- sd(df)
+
+  for (i in 1:length(df)) {
+    if (abs((df[i]-media)/desvStd)>3) {
+      output <- c(output,df[i])
+    }
+  } 
+  return(output)
+}
+
+# Se recorren las columnas relevantes para enumerar los outliers.
+for (columna in colnames(dataWine[1:11])) {
+  print(sprintf("Atributo: %s",columna))
+  list_outlier <- zscore_outlier(dataWine[,columna])
+  print(sort(list_outlier))
+}
+
+```
+
+# Limpieza de los datos
+
+> Tratamiento Outliers.
+
+Optamos por eliminar los Outliers obtenido previamente, asumiendo que son valores perdidos o tomados erróneamente en las mediciones, con el objeto de que no condicione la solución.
+
+
+```{r message= FALSE, warning=FALSE}
+
+dataWineAux <- dataWine
+# Eliminamos Outliers.
+# Nos basamos en los valores obtenidos y confirmados en apartado anterior.
+dataWineAux$fixed.acidity[dataWineAux$fixed.acidity>=13.7] <- NA
+dataWineAux$volatile.acidity[dataWineAux$volatile.acidity>=1.07] <- NA
+dataWineAux$citric.acid[dataWineAux$citric.acid==1.0] <- NA
+dataWineAux$residual.sugar[dataWineAux$residual.sugar>=7.0] <- NA
+dataWineAux$chlorides[dataWineAux$chlorides>=0.23] <- NA
+dataWineAux$free.sulfur.dioxide[dataWineAux$free.sulfur.dioxide>=48.0] <- NA
+dataWineAux$total.sulfur.dioxide[dataWineAux$total.sulfur.dioxide>=147.0] <- NA
+dataWineAux$density[dataWineAux$density<=0.99084] <- NA
+dataWineAux$density[dataWineAux$density>=1.00242] <- NA
+dataWineAux$pH[dataWineAux$pH<=2.74] <- NA
+dataWineAux$pH[dataWineAux$pH>=3.78] <- NA
+dataWineAux$sulphates[dataWineAux$sulphates>=1.17] <- NA
+dataWineAux$alcohol[dataWineAux$alcohol>=14.0] <- NA
+
+# Se omite los NA asignados previamente
+dataWineFinal=na.omit(dataWineAux)
+dataWineAux <- NULL
+```
+
+# Análisis de los datos.
+
+> Chequeo de la Normalidad y de la homogeneidad de la varianza (Homocedasticidad)
+
+Se verifica la Normalidad de los atributos con shapiro.test (y con Kolmogorov-Smirnov en algunos casos).
+En ambos casos, el resultado es que no se puede concluir con estos tests de Normalidad que ninguno de los atributos siga una distribución Normal.
+
+Si el p-valor es menor al nivel de significancia (0.05), entonces generalmente la hipótesis nula es rechazada y se concluye que los datos no cuentan con una distribución normal. 
+Si, por el contrario, el p-valor es mayor a (0.05), se concluye que no se puede rechazar dicha hipótesis y se asume que los datos siguen una distribución normal.
+
+En todos los casos, el p-valor es inferior a 0.05.
+
+
+```{r message= FALSE, warning=FALSE}
+library(car)
+# Comprobación Normalidad
+# Shapiro-Wilk 
+# Se construye la Matriz para el análisis a partir de los atributos seleccionados.
+ks.test(dataWine$fixed.acidity, pnorm, mean(dataWine$fixed.acidity), sd(dataWine$fixed.acidity))
+shapiro.test(dataWine$fixed.acidity)
+
+# Se construye la Matriz para el análisis a partir de los atributos seleccionados.
+#ks.test(dataWine$fixed.acidity, pnorm, mean(dataWine$fixed.acidity), sd(dataWine$fixed.acidity))
+#shapiro.test(dataWine$fixed.acidity)
+
+# Comprobación Homocedasticidad
+# la hipótesis nula asume igualdad de varianzas en los diferentes grupos de datos, por lo que p-valores inferiores al nivel de significancia indicarán heterocedasticidad.
+leveneTest(dataWine$fixed.acidity~dataWine$revisionCalidad,dataWine)
+
+# Comprobación Homocedasticidad - SI NO se cumple Normalidad
+fligner.test(dataWine$fixed.acidity~dataWine$revisionCalidad,dataWine)
+
+# Otros Atributos
+shapiro.test(dataWine$volatile.acidity)
+shapiro.test(dataWine$fixed.acidity)
+shapiro.test(dataWine$citric.acid)
+shapiro.test(dataWine$residual.sugar)
+shapiro.test(dataWine$chlorides)
+shapiro.test(dataWine$free.sulfur.dioxide)
+shapiro.test(dataWine$total.sulfur.dioxide)
+shapiro.test(dataWine$density)
+shapiro.test(dataWine$pH)
+shapiro.test(dataWine$sulphates)
+shapiro.test(dataWine$alcohol)
+
+```
+
+
+Chequeo NORMALIDAD y Homocedasticidad - sobre dataSet sin Outliers
+
+
+```{r message= FALSE, warning=FALSE}
+library(car)
+# Comprobación Normalidad
+# Shapiro-Wilk 
+ks.test(dataWineFinal$fixed.acidity, pnorm, mean(dataWineFinal$fixed.acidity), sd(dataWineFinal$fixed.acidity))
+shapiro.test(dataWineFinal$fixed.acidity)
+
+#ks.test(dataWine$fixed.acidity, pnorm, mean(dataWine$fixed.acidity), sd(dataWine$fixed.acidity))
+#shapiro.test(dataWine$fixed.acidity)
+
+# Comprobación Homocedasticidad - SI se cumple Normalidad
+# la hipótesis nula asume igualdad de varianzas en los diferentes grupos de datos, por lo que p-valores inferiores al nivel de significancia indicarán heterocedasticidad.
+leveneTest(dataWineFinal$fixed.acidity~dataWineFinal$revisionCalidad,dataWineFinal)
+
+# Comprobación Homocedasticidad - SI NO se cumple Normalidad
+#fligner.test(dataWineFinal$fixed.acidity~dataWineFinal$revisionCalidad,dataWineFinal)
+
+
+# Resto de Atributos
+shapiro.test(dataWineFinal$volatile.acidity)
+leveneTest(dataWineFinal$fixed.acidity~dataWineFinal$revisionCalidad,dataWineFinal)
+
+shapiro.test(dataWineFinal$citric.acid)
+leveneTest(dataWineFinal$citric.acid~dataWineFinal$revisionCalidad,dataWineFinal)
+
+shapiro.test(dataWineFinal$residual.sugar)
+leveneTest(dataWineFinal$residual.sugar~dataWineFinal$revisionCalidad,dataWineFinal)
+
+shapiro.test(dataWineFinal$chlorides)
+leveneTest(dataWineFinal$chlorides~dataWineFinal$revisionCalidad,dataWineFinal)
+
+shapiro.test(dataWineFinal$free.sulfur.dioxide)
+leveneTest(dataWineFinal$free.sulfur.dioxide~dataWineFinal$revisionCalidad,dataWineFinal)
+
+shapiro.test(dataWineFinal$total.sulfur.dioxide)
+leveneTest(dataWineFinal$total.sulfur.dioxide~dataWineFinal$revisionCalidad,dataWineFinal)
+
+shapiro.test(dataWineFinal$density)
+leveneTest(dataWineFinal$density~dataWineFinal$revisionCalidad,dataWineFinal)
+
+shapiro.test(dataWineFinal$pH)
+leveneTest(dataWineFinal$pH~dataWineFinal$revisionCalidad,dataWineFinal)
+
+shapiro.test(dataWineFinal$sulphates)
+leveneTest(dataWineFinal$sulphates~dataWineFinal$revisionCalidad,dataWineFinal)
+
+shapiro.test(dataWineFinal$alcohol)
+leveneTest(dataWineFinal$alcohol~dataWineFinal$revisionCalidad,dataWineFinal)
+```
+
+Según Shapiro-Wilk no se puede garantizar que los distintos atributos del DataSet sigan una distribución Normal.
+Sin embargo, aplicando el Teorema central del límite que establece que la media de una muestra de cualquier conjunto de datos es cada vez más normal a medida que aumenta la cantidad de observaciones; y teniendo en cuenta que tenemos un número reducido de muestras, concluimos que los datos sí siguen una distribución normal.
+
+En lo que respecta a la homogeneidad de la varianza, asumiendo que sí es normal aplicando el teorema central del límite, encontramos que las siguientes variables sí tienen la misma homogeneidad de la varianza que la nueva variable discretizada:
+* citric.acid, chlorides, free.sulfur.dioxide, total.sulfur.dioxide, pH, sulphates, alcohol
+
+
+> Correlación de los atributos. 
+
+Examinamos la matriz de correlación de las variables númericas del conjunto de datos.
+
+```{r message= FALSE, warning=FALSE}
+
+library(corrplot)
+corr.res<-cor(dataWineFinal[1:12])
+corrplot(corr.res,method="circle")
+
+```
+
+Se observa una correlación relevante entre las siguientes variables:
+* fixed.acidity y citric.acid
+* fixed.acidity y density
+* fixed.acidity y pH
+* volatile.acidity y citric.acid
+* density y citric.acid
+* citric.acid y pH
+* free.sulfur.dioxide y total.sulfur.dioxide
+
+Sin embargo, no existe una correlación tan significativa que aconseje una reducción de la dimensionalidad eliminando algún atributo dependiente de otro. Esto implicaría seguramente pérdida de información.
+Por tanto, continua el análisis manteniendo el mismo número de atributos.
+
+> Preparación de los conjuntos de datos de entrenamiento y prueba.
+
+
+```{r message= FALSE, warning=FALSE}
+
+set.seed(1)
+dataWineFinal_random <- dataWineFinal[sample(nrow(dataWineFinal)),]
+dataWineFinal_randomLineal <- dataWineFinal_random[1:12]
+
+# La clase objetivo a predecir es revisionCalidad
+y <- dataWineFinal_random[,13] 
+X <- dataWineFinal_random[,1:11]
+
+# Formamos el conjunto de datos de entrenamiento y test a partir de los 2/3 y 1/3 del conjunto de datos inicial, ordenado de forma aleatoria.
+trainX <- X[1:972,]
+trainy <- y[1:972]
+testX <- X[972:1458,]
+testy <- y[972:1458]
+
+```
+
+
+
+> Análisis KNN
+
+En primer lugar,como paso previo, intentaremos tener alguna aproximación del número de cluster óptimo.
+Utilizamos el paquete NbClust para conseguir información del número de cluster óptimo entre 2 y 10.
+
+```{r message= FALSE, warning=FALSE}
+#Cargamos paquetes requeridos
+library(factoextra)
+library(NbClust)
+
+nbclust_out <- NbClust(
+  data = trainX,
+  distance = "euclidean",
+  min.nc = 2, 
+  max.nc = 10, 
+  method = "ward.D" #kmeans
+)
+
+# Se crea un dataframe del numero optimo de clusters
+nbclust_plot <- data.frame(clusters = nbclust_out$Best.nc[1, ])
+# select only indices which select between 2 and 10 clusters
+nbclust_plot <- subset(nbclust_plot, clusters >= 2 & clusters <= 10)
+
+# create plot
+ggplot(nbclust_plot) +
+  aes(x = clusters) +
+  geom_histogram(bins = 30L, fill = "#0c4c8a") +
+  labs(x = "Numero de clusters", y = "Frecuencia entre todos los índices", title = "Numero optimo de clusters") +
+  theme_minimal()
+```
+
+El resultado indica que el número óptimo de cluster es 2.
+No parece concluyente. Examinando los diagramas de Hubert, observamos que el codo podría locaizarse entre 4 cluster (aunque podría ser un mínimo local) y 7 clusters.
+
+
+Para el algoritmo KNN, emplearemos el paquete Caret.
+
+```{r message= FALSE, warning=FALSE}
+
+library(caret)
+
+# Se empleará Cross Validation
+ctrl <- trainControl(method="repeatedcv",repeats = 3)
+knnFit <- train(trainX,trainy, method = "knn", trControl = ctrl, preProcess = c("center","scale"), tuneLength = 20)
+
+knnFit
+
+predicted_model <- predict( knnFit, testX, type="raw" )
+print(sprintf("La precisión de KNN es: %.2f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+
+```
+
+Con los datos de entrenamiento, se consigue un resultado óptimo con 11 clusters, lográndose una precisión del modelo con los datos de test del 84.02%
+
+
+
+> Análisis Arbol Decision
+
+Para el árbol de decisión, obtendremos también las reglas de decisión.
+Para ello, utilizaremos el paquete C50.
+
+```{r message= FALSE, warning=FALSE}
+trainy = as.factor(trainy)
+model_rules <- C50::C5.0(trainX, trainy,rules=TRUE )
+summary(model_rules)
+```
+
+El árbol de decisión genera 20 reglas de decisión, con lo que consiguen clasificar correctamente el conjunto de entrenamiento salvo en 74 casos (7% de los casos).
+
+El uso de los atributos más relevantes es el siguiente:
+* citric.acid con un 98%
+* Alcohol con con 72%.
+* fixed.acidity con con 71%.
+
+Por contra, el atributo pH apenas se utiliza. 
+Con este modelo se consigue una precisión del 83%.
+
+```{r message= FALSE, warning=FALSE}
+predicted_model <- predict( model_rules, testX, type="class" )
+print(sprintf("La precisión del árbol es: %.2f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+
+```
+
+
+> Tunning: Iteración (Boosting adaptativo) del árbol del decisión.
+
+A continuación, utilizaremos el Boosting adaptativo para intentar mejorar el modelo del árbol de decisión.
+
+Adicionalmente, cargaremos el paquete gmodels, para utilizar Crosstable y obtener más información en la matriz de confusión, concretamente los porcentajes en cada casilla, así como los totales por fila y columna.
+
+
+```{r message= FALSE, warning=FALSE}
+library(gmodels)
+
+# Generamos modelo Boosted con 10 trial (lo habitual es indicar 10)
+model_tree_boosted <- C50::C5.0(trainX, trainy,trial=10)
+summary(model_tree_boosted)
+
+predicted_model_boosted <- predict( model_tree_boosted, testX, type="class" )
+
+# Crosstable para tener más info de la matriz de confusión
+CrossTable(testy, predicted_model_boosted,prop.chisq  = FALSE, prop.c = FALSE, prop.r =FALSE,dnn = c('Reality', 'Prediction'))
+
+#Matriz de confusión para calcular la precisión del algoritmo con conjunto de test.
+mat_conf<-table(testy,Predicted=predicted_model_boosted)
+
+porcentaje_correct<-100 * sum(diag(mat_conf)) / sum(mat_conf)
+print(sprintf("El %% de registros correctamente clasificados es: %.4f %%",porcentaje_correct))
+
+```
+
+La variante que se ha aplicado es Boosting adaptativo, que se basa en aplicar diferentes iteraciones de clasificación sobre el mismo conjunto de datos de entrenamiento. El primer clasificador, tal y como hicimos con las reglas de decisión, cometió una serie de errores sobre los que trabajará el siguiente clasificador en la siguiente iteración, y así sucesivamente hasta que ya no haya mejora significativa o se llegue al número de iteraciones o trial indicado. Cada clasificador tiene su aportación a la hora de determinar la clase que se debe predecir. La gran diferencia, por tanto, es que no es un clasificador sino un conjunto de ellos.
+
+En este ejemplo concreto, con 10 iteraciones se consigue clasificar correctamente todos los casos de entrenamiento.
+El % de muestras correctamente clasificadas en el el conjunto de datos de test es del 87%, mejorando lo que se tenía previamente.
+
+EL uso de los atributos se incrementa al 100% en los siguientes atributos:
+
+* Alcohol, volatile.acidity.
+
+Adicionalmente, se incrementa en resto de variables.
+Todos los atributos forman parte, en mayor o menor medida, de la decisión de clasificación.
+
+
+> RANDOM FOREST
+
+Por último, aplicaremos el Random Forest que es un algoritmo basado en árboles, que es bastante conocido y potente.
+
+```{r message= FALSE, warning=FALSE}
+
+library(caret)
+
+# Se empleará Cross Validation
+ctrl <- trainControl(method="cv",repeats = 3)
+rfFit <- train(trainX,trainy, method = "rf", trControl = ctrl, preProcess = c("center","scale"), tuneLength = 20)
+
+rfFit
+
+predicted_rf <- predict( rfFit, testX, type="raw" )
+
+# Matriz de Confusión 
+confusionMatrix(predicted_rf,testy)
+
+#Precisión del algoritmo
+print(sprintf("La precisión de RANDOM FOREST es: %.2f %%",100*sum(predicted_rf == testy) / length(predicted_rf)))
+
+```
+
+Random Forest utiliza 4 candidatos para alimentar el algoritmo en nuestro caso particular.
+
+Se obtiene una precisión ligeramente superior al conseguido con el Boosting Adaptativo previamente.
